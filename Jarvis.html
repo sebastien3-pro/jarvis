@@ -1,0 +1,406 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Jarvis</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Rajdhani:wght@400;500;600&display=swap">
+<style>
+/* Layout: one full-height screen. Wordmark top, reactive orb centre, last exchange under it, command bar at the bottom. Single dark look by choice. */
+:root {
+  --bg: #02080c;
+  --bg-2: #061820;
+  --ink: #d9f6ff;
+  --ink-dim: #6f9eae;
+  --cyan: #19d3f5;
+  --cyan-deep: #0a7c95;
+  --amber: #ffb44a;
+  --line: rgba(25, 211, 245, 0.22);
+  --font-display: "Orbitron", "Eurostile", "Arial Narrow", sans-serif;
+  --font-body: "Rajdhani", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: radial-gradient(ellipse at 50% 38%, var(--bg-2) 0%, var(--bg) 70%);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 18px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px;
+  overflow-x: hidden;
+}
+.app { height: 100%; max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mark { font-family: var(--font-display); font-weight: 700; letter-spacing: 0.5em; font-size: 14px; color: var(--cyan); text-shadow: 0 0 12px rgba(25,211,245,.6); }
+.tools { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.chip {
+  font-family: var(--font-display); font-size: 11px; letter-spacing: .12em; font-weight: 500;
+  color: var(--ink-dim); background: transparent; border: 1px solid var(--line); border-radius: 4px;
+  padding: 6px 9px; cursor: pointer; min-height: 32px;
+}
+.chip[aria-pressed="true"] { color: var(--bg); background: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 14px rgba(25,211,245,.5); }
+.chip:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.stage { position: relative; flex: 1 1 auto; min-height: 180px; display: grid; place-items: center; }
+canvas { width: 100%; height: 100%; display: block; max-height: 100%; cursor: pointer; touch-action: manipulation; }
+.status { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; font-family: var(--font-display); font-size: 11px; letter-spacing: .3em; color: var(--cyan); text-transform: uppercase; pointer-events: none; }
+.status.busy { color: var(--amber); }
+.timers { position: absolute; top: 0; left: 0; display: flex; flex-direction: column; gap: 4px; font-family: var(--font-display); font-size: 11px; letter-spacing: .1em; color: var(--amber); font-variant-numeric: tabular-nums; }
+.log { flex: 0 0 auto; max-height: 28vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 2px; scrollbar-width: thin; scrollbar-color: var(--cyan-deep) transparent; }
+.msg { max-width: 100%; line-height: 1.3; overflow-wrap: anywhere; }
+.msg .who { font-family: var(--font-display); font-size: 10px; letter-spacing: .25em; color: var(--ink-dim); margin-right: 8px; }
+.msg.j { color: var(--ink); }
+.msg.j .who { color: var(--cyan); }
+.msg.u { color: var(--ink-dim); }
+.msg.err { color: var(--amber); }
+form { display: flex; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 6px; padding: 6px; background: rgba(6, 24, 32, .75); }
+input[type=text] { flex: 1 1 auto; min-width: 0; background: transparent; border: 0; color: var(--ink); font: inherit; font-size: 18px; padding: 8px; }
+input[type=text]::placeholder { color: var(--ink-dim); }
+.btn { flex: 0 0 auto; min-width: 44px; min-height: 44px; border-radius: 6px; border: 1px solid var(--cyan); background: transparent; color: var(--cyan); font-family: var(--font-display); font-size: 11px; letter-spacing: .15em; cursor: pointer; }
+.btn.on { background: var(--cyan); color: var(--bg); box-shadow: 0 0 18px rgba(25,211,245,.6); }
+.btn[hidden] { display: none; }
+.note { font-size: 14px; color: var(--ink-dim); min-height: 1.2em; text-align: center; }
+@media (prefers-reduced-motion: reduce) { .btn.on { box-shadow: none; } }
+</style>
+
+<div class="app">
+  <header>
+    <div class="mark">J.A.R.V.I.S</div>
+    <div class="tools">
+      <button class="chip" data-lang="en" aria-pressed="true" type="button">EN</button>
+      <button class="chip" data-lang="fr" aria-pressed="false" type="button">FR</button>
+      <button class="chip" data-lang="ht" aria-pressed="false" type="button" title="Kreyòl ayisyen">KREYÒL</button>
+      <button class="chip" id="voice" aria-pressed="true" type="button">VOICE</button>
+    </div>
+  </header>
+
+  <div class="stage">
+    <canvas id="orb" aria-label="Jarvis orb. Tap to talk."></canvas>
+    <div class="timers" id="timers"></div>
+    <div class="status" id="status">Standing by</div>
+  </div>
+
+  <div class="log" id="log" aria-live="polite"></div>
+  <div class="note" id="note"></div>
+
+  <form id="form" autocomplete="off">
+    <input type="text" id="text" placeholder="Type to Jarvis" aria-label="Message to Jarvis">
+    <button class="btn" id="mic" type="button" aria-label="Talk to Jarvis" hidden>MIC</button>
+    <button class="btn" id="send" type="submit" aria-label="Send">SEND</button>
+  </form>
+</div>
+
+<script>
+(function () {
+  var LANGS = {
+    en: { dict: "en", tts: "en-US", name: "English", greet: "Online. What can I do for you?", hear: "Listening", think: "Thinking", speak: "Speaking", idle: "Standing by", ph: "Type to Jarvis" },
+    fr: { dict: "fr", tts: "fr-FR", name: "French", greet: "En ligne. Que puis-je faire pour vous ?", hear: "J'écoute", think: "Réflexion", speak: "Je réponds", idle: "En veille", ph: "Écris à Jarvis" },
+    ht: { dict: "ht", tts: "fr-FR", name: "Haitian Creole (Kreyòl ayisyen)", greet: "Mwen la. Kisa mwen ka fè pou ou ?", hear: "Mwen ap koute", think: "Mwen ap reflechi", speak: "Mwen ap pale", idle: "Mwen pare", ph: "Ekri bay Jarvis" }
+  };
+  var lang = "en";
+  var mode = "idle"; // idle | listening | thinking | speaking
+  var voiceOn = true;
+  var history = [];
+  var busyCtl = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var logEl = $("log"), statusEl = $("status"), noteEl = $("note"), textEl = $("text"), micBtn = $("mic"), timersEl = $("timers");
+
+  try { var saved = localStorage.getItem("jarvis-lang"); if (saved && LANGS[saved]) lang = saved; } catch (e) {}
+
+  function setMode(m) {
+    mode = m;
+    var L = LANGS[lang];
+    var label = m === "listening" ? L.hear : m === "thinking" ? L.think : m === "speaking" ? L.speak : L.idle;
+    statusEl.textContent = label;
+    statusEl.classList.toggle("busy", m === "thinking");
+    micBtn.classList.toggle("on", m === "listening");
+  }
+  function note(t) { noteEl.textContent = t || ""; }
+  function addMsg(cls, who, text) {
+    var d = document.createElement("div");
+    d.className = "msg " + cls;
+    var w = document.createElement("span"); w.className = "who"; w.textContent = who;
+    var s = document.createElement("span"); s.textContent = text;
+    d.appendChild(w); d.appendChild(s);
+    logEl.appendChild(d);
+    logEl.scrollTop = logEl.scrollHeight;
+    return s;
+  }
+
+  /* ---------- language ---------- */
+  function applyLang() {
+    document.querySelectorAll("[data-lang]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.lang === lang)); });
+    textEl.placeholder = LANGS[lang].ph;
+    document.documentElement.lang = lang === "ht" ? "ht" : lang;
+    if (mode === "idle") setMode("idle");
+    try { localStorage.setItem("jarvis-lang", lang); } catch (e) {}
+  }
+  document.querySelectorAll("[data-lang]").forEach(function (b) {
+    b.addEventListener("click", function () { lang = b.dataset.lang; applyLang(); note(lang === "ht" ? "Kreyòl: mwen reponn an Kreyòl. Si mikwo a pa mache pou Kreyòl, ekri mesaj ou." : ""); });
+  });
+  $("voice").addEventListener("click", function () {
+    voiceOn = !voiceOn;
+    $("voice").setAttribute("aria-pressed", String(voiceOn));
+    if (!voiceOn) stopSpeaking();
+  });
+
+  /* ---------- speech out ---------- */
+  var synth = window.speechSynthesis;
+  function pickVoice(tag) {
+    if (!synth) return null;
+    var vs = synth.getVoices();
+    var exact = vs.filter(function (v) { return v.lang && v.lang.replace("_", "-").toLowerCase() === tag.toLowerCase(); });
+    if (exact.length) return exact[0];
+    var pre = vs.filter(function (v) { return v.lang && v.lang.toLowerCase().indexOf(tag.slice(0, 2).toLowerCase()) === 0; });
+    return pre[0] || null;
+  }
+  function stopSpeaking() { try { if (synth) synth.cancel(); } catch (e) {} if (mode === "speaking") setMode("idle"); }
+  function speak(text) {
+    if (!voiceOn || !synth) { setMode("idle"); return; }
+    try {
+      synth.cancel();
+      var clean = text.replace(/[*_`#>]+/g, "").replace(/\s+/g, " ").trim();
+      if (!clean) { setMode("idle"); return; }
+      var u = new SpeechSynthesisUtterance(clean);
+      var L = LANGS[lang];
+      u.lang = L.tts;
+      var v = pickVoice(L.tts);
+      if (v) u.voice = v;
+      u.rate = 1.02; u.pitch = 0.92;
+      u.onstart = function () { setMode("speaking"); };
+      u.onend = u.onerror = function () { if (mode === "speaking") setMode("idle"); };
+      setMode("speaking");
+      synth.speak(u);
+    } catch (e) { setMode("idle"); }
+  }
+  if (synth && synth.addEventListener) synth.addEventListener("voiceschanged", function () {});
+
+  /* ---------- timers ---------- */
+  var timers = [];
+  function renderTimers() {
+    timersEl.textContent = "";
+    var now = Date.now();
+    timers.forEach(function (t) {
+      var left = Math.max(0, Math.round((t.end - now) / 1000));
+      var m = Math.floor(left / 60), s = left % 60;
+      var d = document.createElement("div");
+      d.textContent = (t.label || "TIMER").toUpperCase() + "  " + m + ":" + (s < 10 ? "0" : "") + s;
+      timersEl.appendChild(d);
+    });
+  }
+  setInterval(function () {
+    var now = Date.now();
+    var done = timers.filter(function (t) { return t.end <= now; });
+    if (done.length) {
+      timers = timers.filter(function (t) { return t.end > now; });
+      done.forEach(function (t) {
+        var msg = lang === "fr" ? "Minuteur terminé : " + (t.label || "") : lang === "ht" ? "Revèy fini : " + (t.label || "") : "Timer finished: " + (t.label || "your timer");
+        addMsg("j", "JARVIS", msg);
+        if (mode === "idle") speak(msg);
+      });
+    }
+    renderTimers();
+  }, 500);
+
+  /* ---------- brain ---------- */
+  var sample = null;
+  var toolDefs = [
+    {
+      name: "current_time",
+      description: "Get the user's current local date and time.",
+      inputSchema: { type: "object", properties: {} },
+      execute: function () { return new Date().toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" }); }
+    },
+    {
+      name: "set_timer",
+      description: "Start a countdown timer on the user's screen. It announces itself when done.",
+      inputSchema: { type: "object", properties: { seconds: { type: "number", description: "Duration in seconds" }, label: { type: "string", description: "Short name for the timer" } }, required: ["seconds"] },
+      execute: function (input) {
+        var s = Math.max(1, Math.min(86400, Number(input.seconds) || 0));
+        timers.push({ end: Date.now() + s * 1000, label: input.label || "" });
+        renderTimers();
+        return "Timer set for " + s + " seconds.";
+      }
+    }
+  ];
+  function instructions() {
+    return "You are JARVIS, a calm, dry-witted voice assistant, like the one from Iron Man. The user is Sebastien. " +
+      "Reply in " + LANGS[lang].name + " unless he clearly speaks another language, then match that one. " +
+      "Your answers are spoken aloud: use one to three short sentences, plain words, no markdown, no lists, no emoji. " +
+      "Use the set_timer tool for timers and current_time for the time or date. You cannot browse the web or control devices yet; say so briefly if asked. " +
+      "Now: " + new Date().toString() + ".";
+  }
+  function buildMessages() {
+    var h = history.slice(-12);
+    while (h.length && h[0].role !== "user") h.shift();
+    var out = h.map(function (m) { return { role: m.role, content: m.content }; });
+    if (out.length) out[0] = { role: "user", content: "[Instructions: " + instructions() + "]\n\n" + out[0].content };
+    return out;
+  }
+  async function ask(text) {
+    stopSpeaking();
+    history.push({ role: "user", content: text });
+    addMsg("u", "YOU", text);
+    if (!sample) {
+      addMsg("err", "JARVIS", "My brain is not connected in this view. Open the page in the Claude app or claude.ai while signed in.");
+      setMode("idle"); return;
+    }
+    setMode("thinking");
+    var bubble = addMsg("j", "JARVIS", "…");
+    var ctl = new AbortController(); busyCtl = ctl;
+    try {
+      var res = await sample(buildMessages(), {
+        cache: false, modelTier: "quick", signal: ctl.signal, tools: toolDefs,
+        onText: function (e) { bubble.textContent = e.text || "…"; logEl.scrollTop = logEl.scrollHeight; }
+      });
+      var reply = (res && res.text || "").trim() || "…";
+      bubble.textContent = reply;
+      history.push({ role: "assistant", content: reply });
+      speak(reply);
+    } catch (err) {
+      var code = err && err.code;
+      bubble.parentNode.className = "msg err";
+      bubble.textContent = code === "not_granted" ? "Permission was declined, so I cannot think. Allow it in this page's Permissions menu."
+        : code === "rate_limited" ? "Too many requests right now. Try again in a moment."
+        : (err && err.name === "AbortError") ? "Stopped." : "Something went wrong reaching my brain. Try again.";
+      history.pop();
+      setMode("idle");
+    } finally { busyCtl = null; }
+  }
+
+  /* ---------- ears (dictation) ---------- */
+  var dict = null, silenceTimer = null, sendOnIdle = false;
+  function stopTalk() { clearTimeout(silenceTimer); if (dict) dict.stop().catch(function () {}); }
+  function startTalk() {
+    if (!dict) { note("Voice input needs Chrome or Edge in the Claude app or claude.ai. Type instead."); textEl.focus(); return; }
+    if (busyCtl) { busyCtl.abort(); }
+    stopSpeaking();
+    textEl.value = "";
+    sendOnIdle = true;
+    dict.start({ language: LANGS[lang].dict }).then(function () { note(""); }).catch(function (e) {
+      sendOnIdle = false;
+      var c = e && e.code;
+      if (c === "unavailable") note(lang === "ht" ? "Dikte pa disponib an Kreyòl isit la. Ekri mesaj ou." : "Voice input is not available for " + LANGS[lang].name + " here. Type instead.");
+      else if (c === "not_granted") note("Microphone permission was declined. Type instead.");
+      else if (c !== "stopped" && c !== "dismissed") note("Could not start the microphone. Try again.");
+    });
+  }
+  function wireDictation(d) {
+    d.onPartial(function (e) { if (e.text) { textEl.value = (heard + " " + e.text).trim(); } });
+    var heard = "";
+    d.onFinal(function (e) {
+      heard = (heard + e.text).replace(/^\s+/, "");
+      textEl.value = heard;
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(function () { d.stop().catch(function () {}); }, 1800);
+    });
+    d.onState(function (e) {
+      if (e.state === "listening") { heard = ""; setMode("listening"); clearTimeout(silenceTimer); silenceTimer = setTimeout(function () { d.stop().catch(function () {}); }, 9000); }
+      if (e.state === "idle") {
+        clearTimeout(silenceTimer);
+        if (mode === "listening") setMode("idle");
+        var go = sendOnIdle && (e.reason === "stopped" || e.reason === "viewer_stopped");
+        sendOnIdle = false;
+        if (go) setTimeout(function () { var t = textEl.value.trim(); if (t) { textEl.value = ""; ask(t); } }, 200); // let the last words land
+      }
+    });
+  }
+
+  micBtn.addEventListener("click", function () { if (mode === "listening") stopTalk(); else startTalk(); });
+  $("form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var t = textEl.value.trim();
+    if (mode === "listening") { sendOnIdle = false; stopTalk(); }
+    if (!t) return;
+    textEl.value = "";
+    ask(t);
+  });
+
+  /* ---------- orb ---------- */
+  var cv = $("orb"), ctx = cv.getContext("2d");
+  var W = 0, H = 0, dpr = 1;
+  var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var r = cv.getBoundingClientRect();
+    W = Math.max(1, r.width); H = Math.max(1, r.height);
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", resize);
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(cv);
+  var N = 220, parts = [];
+  for (var i = 0; i < N; i++) parts.push({ a: Math.random() * 6.283, r: 0.62 + Math.random() * 0.5, s: (Math.random() - .5) * 0.25, z: 0.6 + Math.random() * 1.4, p: Math.random() * 6.283 });
+  var amp = 0.03, spin = 0.2, glow = 0.6, t0 = performance.now();
+  function frame(now) {
+    var t = (now - t0) / 1000;
+    var targetAmp = mode === "listening" ? 0.10 + 0.05 * Math.abs(Math.sin(t * 7.3) * Math.sin(t * 3.1)) : mode === "speaking" ? 0.08 + 0.07 * Math.abs(Math.sin(t * 9) * Math.sin(t * 4.3 + 1)) : mode === "thinking" ? 0.04 : 0.025;
+    var targetSpin = mode === "thinking" ? 1.6 : mode === "listening" ? 0.5 : mode === "speaking" ? 0.4 : 0.15;
+    var targetGlow = mode === "idle" ? 0.55 : 0.95;
+    if (reduce) { targetSpin *= 0.2; targetAmp *= 0.4; }
+    amp += (targetAmp - amp) * 0.12; spin += (targetSpin - spin) * 0.05; glow += (targetGlow - glow) * 0.06;
+    var cx = W / 2, cy = H / 2 - 6, R = Math.min(W, H) * 0.34;
+    ctx.clearRect(0, 0, W, H);
+    var tone = mode === "thinking" ? "255,180,74" : "25,211,245";
+    // halo
+    var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.9);
+    g.addColorStop(0, "rgba(" + tone + "," + (0.30 * glow) + ")");
+    g.addColorStop(0.45, "rgba(10,124,149," + (0.12 * glow) + ")");
+    g.addColorStop(1, "rgba(2,8,12,0)");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // particles
+    for (var i = 0; i < N; i++) {
+      var p = parts[i];
+      p.a += p.s * spin * 0.02 + 0.0008 * spin;
+      var rr = R * (p.r + amp * 1.6 * Math.sin(t * 2 + p.p));
+      var x = cx + Math.cos(p.a) * rr, y = cy + Math.sin(p.a) * rr;
+      ctx.fillStyle = "rgba(" + tone + "," + (0.25 + 0.5 * Math.abs(Math.sin(t + p.p))) * glow + ")";
+      ctx.fillRect(x, y, p.z, p.z);
+    }
+    // ticked ring
+    var ticks = 90, ringR = R * (0.78 + amp * 0.5);
+    for (var k = 0; k < ticks; k++) {
+      var a = k / ticks * 6.283 + t * spin * 0.35;
+      var long = k % 5 === 0;
+      var r1 = ringR, r2 = ringR + (long ? R * 0.09 : R * 0.05);
+      ctx.strokeStyle = "rgba(" + tone + "," + (long ? 0.85 : 0.45) * glow + ")";
+      ctx.lineWidth = long ? 1.6 : 1;
+      ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); ctx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2); ctx.stroke();
+    }
+    // arcs
+    ctx.lineWidth = 2;
+    for (var j = 0; j < 3; j++) {
+      var rad = R * (0.62 - j * 0.11) * (1 + amp * 0.6);
+      var start = t * spin * (j % 2 ? -1 : 1) * (1 + j * 0.4) + j * 2;
+      ctx.strokeStyle = "rgba(" + tone + "," + (0.8 - j * 0.15) * glow + ")";
+      ctx.beginPath(); ctx.arc(cx, cy, rad, start, start + 1.7 + j * 0.5); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, rad, start + 3.4, start + 4.1); ctx.stroke();
+    }
+    // core
+    var cr = R * (0.26 + amp * 1.3);
+    var c = ctx.createRadialGradient(cx, cy, 0, cx, cy, cr * 2.2);
+    c.addColorStop(0, "rgba(235,252,255,1)");
+    c.addColorStop(0.25, "rgba(" + tone + ",0.95)");
+    c.addColorStop(1, "rgba(" + tone + ",0)");
+    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(cx, cy, cr * 2.2, 0, 6.283); ctx.fill();
+    requestAnimationFrame(frame);
+  }
+  cv.addEventListener("click", function () {
+    if (mode === "listening") stopTalk();
+    else if (mode === "speaking" || mode === "thinking") { if (busyCtl) busyCtl.abort(); stopSpeaking(); setMode("idle"); }
+    else startTalk();
+  });
+  resize(); requestAnimationFrame(frame);
+
+  /* ---------- boot ---------- */
+  applyLang(); setMode("idle");
+  addMsg("j", "JARVIS", LANGS[lang].greet);
+  if (window.claude && window.claude.use) {
+    window.claude.use("sample").then(function (s) { sample = s; if (!s) note("My brain is not connected in this view."); }).catch(function () {});
+    window.claude.use("dictation").then(function (d) { dict = d; if (d) { micBtn.hidden = false; wireDictation(d); } }).catch(function () {});
+  }
+})();
+</script>
+
+</body></html>
